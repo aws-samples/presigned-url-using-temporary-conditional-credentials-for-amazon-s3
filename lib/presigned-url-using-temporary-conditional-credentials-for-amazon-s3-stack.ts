@@ -41,7 +41,6 @@ export class PresignedUrlUsingTemporaryConditionalCredentialsForAmazonS3Stack ex
 
   private createPresignedUrlRole(bucket: cdk.aws_s3.Bucket) {
     return new iam.Role(this, 'PresignedUrlRole', {
-      roleName: 'PresignedUrlRole',
       assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
       inlinePolicies: {
         'AllowS3BucketObjectAccess': new iam.PolicyDocument({
