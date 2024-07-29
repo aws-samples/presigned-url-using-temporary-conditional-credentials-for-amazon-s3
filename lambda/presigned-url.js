@@ -1,4 +1,6 @@
-const AWS = require('aws-sdk');
+const { STSClient, AssumeRoleCommand, GetCallerIdentityCommand } = require('@aws-sdk/client-sts');
+const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const roleToAssumeArn = process.env.PRESIGN_URL_ROLE_ARN;
 const bucketArn = process.env.BUCKET_ARN;
 const bucketName = process.env.BUCKET_NAME;
@@ -25,32 +27,38 @@ exports.handler = async (event) => {
     };
 
     // Temp credentials created this way have a max session lifetime of 1 hr (3600 seconds)
-    let expireSeconds = 3600
+    let expireSeconds = 3600;
 
     // Create temporary credentials using the policy
-    var credentials = await new AWS.ChainableTemporaryCredentials({
-        params: {
-            RoleArn: roleToAssumeArn,
-            Policy: JSON.stringify(s3Policy),
-            DurationSeconds: expireSeconds
-        },
-        Credentials: {
-            AccessKeyId: AWS.config.credentials.AccessKeyId,
-            SecretAccessKey: AWS.config.credentials.SecretAccessKey,
-            SessionToken: AWS.config.credentials.SessionToken
+    const stsClient = new STSClient();
+    const callerIdentity = await stsClient.send(new GetCallerIdentityCommand({}));
+    const assumedRoleCredentials = await stsClient.send(new AssumeRoleCommand({
+        RoleArn: roleToAssumeArn,
+        Policy: JSON.stringify(s3Policy),
+        DurationSeconds: expireSeconds,
+        RoleSessionName: callerIdentity.Arn.split('/')[1]
+    }));
+
+    // Create a new S3 client using the temporary credentials
+    const s3 = new S3Client({
+        credentials: {
+            accessKeyId: assumedRoleCredentials.Credentials.AccessKeyId,
+            secretAccessKey: assumedRoleCredentials.Credentials.SecretAccessKey,
+            sessionToken: assumedRoleCredentials.Credentials.SessionToken,
+            expiration: assumedRoleCredentials.Credentials.Expiration
         }
     });
 
-    // Create a new S3 client using the temporary credentials
-    const s3 = new AWS.S3(new AWS.Config({
-        credentials: credentials
-    }));
-
     const s3Params = {
         Bucket: bucketName,
-        Key: objectKey,
-        Expires: expireSeconds
+        Key: objectKey
     };
 
-    return await s3.getSignedUrlPromise('getObject', s3Params);
+    const signedUrl = await getSignedUrl(
+        s3,
+        new GetObjectCommand(s3Params),
+        { expiresIn: expireSeconds }
+    );
+
+    return signedUrl;
 };

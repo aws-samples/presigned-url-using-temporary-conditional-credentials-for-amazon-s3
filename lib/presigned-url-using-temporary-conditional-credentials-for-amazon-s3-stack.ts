@@ -62,7 +62,7 @@ export class PresignedUrlUsingTemporaryConditionalCredentialsForAmazonS3Stack ex
 
   private createPresignedUrlLambda(presignedUrlRole: cdk.aws_iam.Role, bucket: cdk.aws_s3.Bucket) {
     const presignedUrlLamnda = new lambda.Function(this, 'PresignedUrlLambda', {
-      runtime: lambda.Runtime.NODEJS_14_X,
+      runtime: lambda.Runtime.NODEJS_20_X,
       handler: 'presigned-url.handler',
       code: lambda.Code.fromAsset('lambda'),
       environment: {
